@@ -19,6 +19,23 @@ impl Iso14443a {
             aqta
         }
     }
+
+    pub fn get_uid(&self) -> &[u8] {
+        &self.uid
+    }
+
+    pub fn get_sak(&self) -> u8 {
+        self.sak
+    }
+
+    pub fn get_aqta(&self) -> u16 {
+        self.aqta
+    }
+
+
+    pub fn is_mifare_classic(&self) -> bool {
+        (self.sak == 8 || self.sak == 0x18 || self.sak == 0x88) && self.uid.len() == 4
+    }
 }
 
 #[derive(Debug, PartialEq)]
