@@ -205,7 +205,7 @@ impl HinataDevice {
             id
         } else {
             let res = self.request(0xE6, vec![]).await?;
-            let array = Self::get_four_bytes(&res)?;
+            let array = Self::get_four_bytes(&res[1..])?;
             self.info.chip_id = Some(array);
             array
         };
@@ -226,7 +226,7 @@ impl HinataDevice {
             hash
         } else {
             let res = self.request(0xE5, vec![]).await?;
-            let array = Self::get_four_bytes(&res)?;
+            let array = Self::get_four_bytes(&res[1..])?;
             self.info.firmware_commit_hash = Some(array);
             array
         };
