@@ -194,13 +194,13 @@ impl HinataDevice {
         Ok(num)
     }
 
-    pub async fn set_led(&mut self, r: u8, g: u8, b: u8) {
-        self.request_without_response(0x07, &[r, g, b]).await;
-    }
+    pub async fn set_led(&mut self, r: u8, g: u8, b: u8) { self.request_without_response(0x07, &[r, g, b]).await; }
 
     pub async fn reset_led(&mut self) {
         self.request_without_response(0xEA, &[]).await
     }
+
+    pub async fn enter_bootloader(&mut self) { self.request_without_response(0xF0, &[]).await }
 
     pub async fn get_chip_id(&mut self) -> Result<[u8; 4], Error> {
         let timestamp = self.get_firmware_timestamp().await?;
