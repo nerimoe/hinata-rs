@@ -7,6 +7,7 @@ use std::thread;
 use std::thread::{JoinHandle};
 use std::time::Duration;
 use hidapi::{HidApi, HidDevice, HidError};
+use tokio::task::spawn_blocking;
 use crate::error::Error;
 use crate::pn532::{ Pn532, Pn532Command, Pn532Direction, Pn532Packet, Pn532Port};
 
@@ -322,87 +323,82 @@ impl HinataDeviceBuilder {
 
 // --- Device Discovery ---
 
-pub struct Hinata {}
-impl Hinata {
-    pub fn new() -> Self {
-        Self {}
-    }
-    pub fn find_devices(&self) -> Result<Vec<HinataDeviceBuilder>, Error> {
-        self.find_devices_inner().map_err(|_| Error::NotFound("Device not found".to_string()))
-    }
-    fn find_devices_inner(&self) -> Result<Vec<HinataDeviceBuilder>, HidError> {
-        struct PreDeviceBuilder {
-            read: Option<HidDevice>,
-            write: Option<HidDevice>
-        }
+pub async fn find_devices() -> Result<Vec<HinataDeviceBuilder>, Error> {
+    spawn_blocking(|| find_devices_inner().map_err(|_| Error::NotFound("Device not found".to_string()))).await.map_err(|e| Error::Other(e.to_string()))?
+}
 
-        let hid = HidApi::new()?;
-
-        let mut devices: HashMap<String, PreDeviceBuilder> = HashMap::new();
-        for device in hid.device_list() {
-            if device.vendor_id() != HINATA_VID {
-                continue;
-            }
-
-            println!("found device: {:?}, instance: {:?}", device, Self::windows_get_instance_id(device.path().to_string_lossy().as_ref()));
-
-            if device.usage_page() == USAGE_PAGE_READ {
-                if let Some(key) = Self::windows_get_instance_id(device.path().to_string_lossy().as_ref()) {
-                    if let Some(builder) = devices.get_mut(&key) {
-                        builder.read = Some(device.open_device(&hid)?)
-                    } else {
-                        devices.insert(key, PreDeviceBuilder { read: Some(device.open_device(&hid)?), write: None });
-                    }
-                };
-            } else if device.usage_page() == USAGE_PAGE_WRITE {
-                if let Some(key) = Self::windows_get_instance_id(device.path().to_string_lossy().as_ref()) {
-                    if let Some(builder) = devices.get_mut(&key) {
-                        builder.write = Some(device.open_device(&hid)?)
-                    } else {
-                        devices.insert(key, PreDeviceBuilder { read: None, write: Some(device.open_device(&hid)?) });
-                    }
-                };
-            }
-        }
-        Ok(
-            devices.into_iter().filter_map(|(instance, builder)| {
-                builder.read.zip(builder.write).map(|(read, write)| {
-                    HinataDeviceBuilder {
-                        read,
-                        write,
-                        instance_id: instance,
-                    }
-                })
-            }).collect()
-        )
+fn find_devices_inner() -> Result<Vec<HinataDeviceBuilder>, HidError> {
+    struct PreDeviceBuilder {
+        read: Option<HidDevice>,
+        write: Option<HidDevice>
     }
 
-    // Generate with Gemini 3
-    fn windows_get_instance_id(path: &str) -> Option<String> {
-        // Windows Path 典型结构:
-        // \\?\HID#VID_xxxx&PID_xxxx&MI_xx#<Instance_ID>#{GUID}
+    let hid = HidApi::new()?;
 
-        let parts: Vec<&str> = path.split('#').collect();
-
-        // 结构校验：必须至少有3个 '#' 分隔出的部分 (Index 0, 1, 2, 3)
-        // parts[0]: \\?\HID
-        // parts[1]: HWID (VID_...&PID_...)
-        // parts[2]: Instance ID (8&899cbf4&0&0002) <- 目标在这里
-        // parts[3]: GUID ({...})
-        if parts.len() < 3 {
-            return None;
+    let mut devices: HashMap<String, PreDeviceBuilder> = HashMap::new();
+    for device in hid.device_list() {
+        if device.vendor_id() != HINATA_VID {
+            continue;
         }
 
-        let instance_id_full = parts[2];
+        // println!("found device: {:?}, instance: {:?}", device, windows_get_instance_id(device.path().to_string_lossy().as_ref()));
 
-        // 找到最后一个 '&' 的位置
-        // 对于复合设备，最后一段通常是接口索引，如 &0000, &0001
-        if let Some(last_amp_index) = instance_id_full.rfind('&') {
-            // 截取前半部分： "8&899cbf4&0"
-            return Some(instance_id_full[..last_amp_index].to_string());
+        if device.usage_page() == USAGE_PAGE_READ {
+            if let Some(key) = windows_get_instance_id(device.path().to_string_lossy().as_ref()) {
+                if let Some(builder) = devices.get_mut(&key) {
+                    builder.read = Some(device.open_device(&hid)?)
+                } else {
+                    devices.insert(key, PreDeviceBuilder { read: Some(device.open_device(&hid)?), write: None });
+                }
+            };
+        } else if device.usage_page() == USAGE_PAGE_WRITE {
+            if let Some(key) = windows_get_instance_id(device.path().to_string_lossy().as_ref()) {
+                if let Some(builder) = devices.get_mut(&key) {
+                    builder.write = Some(device.open_device(&hid)?)
+                } else {
+                    devices.insert(key, PreDeviceBuilder { read: None, write: Some(device.open_device(&hid)?) });
+                }
+            };
         }
-
-        // 如果没有 '&'，说明可能不是复合设备或者结构特殊，直接返回完整ID作为Key
-        Some(instance_id_full.to_string())
     }
+    Ok(
+        devices.into_iter().filter_map(|(instance, builder)| {
+            builder.read.zip(builder.write).map(|(read, write)| {
+                HinataDeviceBuilder {
+                    read,
+                    write,
+                    instance_id: instance,
+                }
+            })
+        }).collect()
+    )
+}
+
+// Generate with Gemini 3
+fn windows_get_instance_id(path: &str) -> Option<String> {
+    // Windows Path 典型结构:
+    // \\?\HID#VID_xxxx&PID_xxxx&MI_xx#<Instance_ID>#{GUID}
+
+    let parts: Vec<&str> = path.split('#').collect();
+
+    // 结构校验：必须至少有3个 '#' 分隔出的部分 (Index 0, 1, 2, 3)
+    // parts[0]: \\?\HID
+    // parts[1]: HWID (VID_...&PID_...)
+    // parts[2]: Instance ID (8&899cbf4&0&0002) <- 目标在这里
+    // parts[3]: GUID ({...})
+    if parts.len() < 3 {
+        return None;
+    }
+
+    let instance_id_full = parts[2];
+
+    // 找到最后一个 '&' 的位置
+    // 对于复合设备，最后一段通常是接口索引，如 &0000, &0001
+    if let Some(last_amp_index) = instance_id_full.rfind('&') {
+        // 截取前半部分： "8&899cbf4&0"
+        return Some(instance_id_full[..last_amp_index].to_string());
+    }
+
+    // 如果没有 '&'，说明可能不是复合设备或者结构特殊，直接返回完整ID作为Key
+    Some(instance_id_full.to_string())
 }

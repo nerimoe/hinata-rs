@@ -7,17 +7,32 @@ pub mod error;
 #[cfg(test)]
 mod tests {
     use tokio::task::spawn_blocking;
-    use crate::hinata::{Hinata};
+    use crate::hinata;
+    use crate::hinata::find_devices;
     #[tokio::test]
     async fn pair_device() {
-        let builders = spawn_blocking(|| {
-            let api = Hinata::new();
-            api.find_devices()
-        }).await.unwrap().unwrap();
+        let builders = find_devices().await.unwrap();
         let mut devices = Vec::new();
-        for x in builders {
-            devices.push(x.build(false).await)
+        for builder in builders {
+            devices.push(builder.build(false).await)
         }
+
         println!("{:?}", devices);
+    }
+
+    #[tokio::test]
+    async fn pair_device_no_panic() {
+        if let Ok(builders) = hinata::find_devices().await {
+
+            let mut devices = Vec::new();
+
+            for builder in builders {
+                devices.push(builder.build(false).await)
+            }
+
+            if let Some(device) = devices.get_mut(0) {
+                println!("{:?}", device.get_firmware_timestamp().await)
+            }
+        }
     }
 }
