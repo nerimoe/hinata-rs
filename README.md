@@ -3,7 +3,7 @@
 A rust library for communicating with HINATA and HINATA Lite 
 
 example:
-```
+```rust
 #[tokio::main]
 async fn main() {
     if let Ok(builders) = hinata::find_devices().await {
