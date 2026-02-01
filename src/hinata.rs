@@ -167,14 +167,14 @@ impl HinataDevice {
         }
     }
 
-    async fn request_without_response(&mut self, cmd: u8, payload: Vec<u8>) {
+    async fn request_without_response(&mut self, cmd: u8, payload: &[u8]) {
         let mut packet = vec![1, cmd];
-        packet.extend_from_slice(&payload);
+        packet.extend_from_slice(payload);
         let _ = self.tx.send(InMessage::SendPacket(packet)).await;
     }
-    async fn request(&mut self, cmd: u8, payload: Vec<u8>) -> Result<Vec<u8>, Error> {
+    async fn request(&mut self, cmd: u8, payload: &[u8]) -> Result<Vec<u8>, Error> {
         let mut packet = vec![1, cmd];
-        packet.extend_from_slice(&payload);
+        packet.extend_from_slice(payload);
         let (subscription, mut rx) = Subscription::new(UnSubscribePolicy::Count(1));
         let _ = self.tx.send(InMessage::SendPacketAndSubscribe(packet, subscription)).await;
         let res = Self::receive_packet(&mut rx, Duration::from_millis(1000)).await?;
@@ -187,7 +187,7 @@ impl HinataDevice {
 
     pub async fn get_firmware_timestamp(&mut self) -> Result<u32, Error> {
         if self.info.firmware_timestamp > 0 {return Ok(self.info.firmware_timestamp)}
-        let raw = self.request(1, vec![]).await?;
+        let raw = self.request(1, &[]).await?;
         let str = String::from_utf8(raw[..10].to_vec())?;
         let num = str.parse::<u32>()?;
         self.info.firmware_timestamp = num;
@@ -195,7 +195,11 @@ impl HinataDevice {
     }
 
     pub async fn set_led(&mut self, r: u8, g: u8, b: u8) {
-        self.request_without_response(0x07, vec![r, g, b]).await;
+        self.request_without_response(0x07, &[r, g, b]).await;
+    }
+
+    pub async fn reset_led(&mut self) {
+        self.request_without_response(0xEA, &[]).await
     }
 
     pub async fn get_chip_id(&mut self) -> Result<[u8; 4], Error> {
@@ -204,7 +208,7 @@ impl HinataDevice {
         let chip_id = if let Some(id) = self.info.chip_id {
             id
         } else {
-            let res = self.request(0xE6, vec![]).await?;
+            let res = self.request(0xE6, &[]).await?;
             let array = Self::get_four_bytes(&res[1..])?;
             self.info.chip_id = Some(array);
             array
@@ -225,7 +229,7 @@ impl HinataDevice {
         let commit_hash = if let Some(hash) = self.info.firmware_commit_hash {
             hash
         } else {
-            let res = self.request(0xE5, vec![]).await?;
+            let res = self.request(0xE5, &[]).await?;
             let array = Self::get_four_bytes(&res[1..])?;
             self.info.firmware_commit_hash = Some(array);
             array
