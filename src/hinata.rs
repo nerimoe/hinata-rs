@@ -344,7 +344,7 @@ fn find_devices_inner() -> Result<Vec<HinataDeviceBuilder>, HidError> {
         // println!("found device: {:?}, instance: {:?}", device, windows_get_instance_id(device.path().to_string_lossy().as_ref()));
 
         if device.usage_page() == USAGE_PAGE_READ {
-            if let Some(key) = windows_get_instance_id(device.path().to_string_lossy().as_ref()) {
+            if let Some(key) = get_instance(device.path().to_string_lossy().as_ref()) {
                 if let Some(builder) = devices.get_mut(&key) {
                     builder.read = Some(device.open_device(&hid)?)
                 } else {
@@ -352,7 +352,7 @@ fn find_devices_inner() -> Result<Vec<HinataDeviceBuilder>, HidError> {
                 }
             };
         } else if device.usage_page() == USAGE_PAGE_WRITE {
-            if let Some(key) = windows_get_instance_id(device.path().to_string_lossy().as_ref()) {
+            if let Some(key) = get_instance(device.path().to_string_lossy().as_ref()) {
                 if let Some(builder) = devices.get_mut(&key) {
                     builder.write = Some(device.open_device(&hid)?)
                 } else {
@@ -375,7 +375,8 @@ fn find_devices_inner() -> Result<Vec<HinataDeviceBuilder>, HidError> {
 }
 
 // Generate with Gemini 3
-fn windows_get_instance_id(path: &str) -> Option<String> {
+#[cfg(target_os = "windows")]
+fn get_instance(path: &str) -> Option<String> {
     // Windows Path 典型结构:
     // \\?\HID#VID_xxxx&PID_xxxx&MI_xx#<Instance_ID>#{GUID}
 
@@ -401,4 +402,9 @@ fn windows_get_instance_id(path: &str) -> Option<String> {
 
     // 如果没有 '&'，说明可能不是复合设备或者结构特殊，直接返回完整ID作为Key
     Some(instance_id_full.to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn get_instance(path: &str) -> Option<String> {
+    Some(path.to_string())
 }
