@@ -239,6 +239,7 @@ impl HinataDevice {
     }
 }
 
+#[derive(Debug)]
 pub struct HinataDeviceBuilder {
     read: HidDevice,
     write: HidDevice,
