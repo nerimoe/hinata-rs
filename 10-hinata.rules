@@ -1,0 +1,1 @@
+ATTRS{manufacturer}=="NERI", MODE="0666"
