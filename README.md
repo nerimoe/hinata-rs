@@ -1,10 +1,5 @@
 # libhinata-rs
 
-A rust library for communicating with HINATA and HINATA Lite 
-
-## usage:
-# libhinata-rs
-
 https://github.com/nerimoe/hinata-rs
 
 A rust library for communicating with HINATA and HINATA Lite
