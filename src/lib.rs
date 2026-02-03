@@ -1,9 +1,22 @@
+mod message;
+mod builder;
+pub mod device;
+pub mod card;
+pub mod pn532;
+pub mod error;
 pub mod utils;
-pub mod hinata;
+
+use tokio::task::spawn_blocking;
+use error::Error;
+use crate::builder::{find_devices_inner, HinataDeviceBuilder};
+
+pub async fn find_devices() -> Result<Vec<HinataDeviceBuilder>, Error> {
+    spawn_blocking(|| find_devices_inner().map_err(|_| Error::NotFound("Device not found".to_string()))).await.map_err(|e| Error::Other(e.to_string()))?
+}
 
 #[cfg(test)]
 mod tests {
-    use crate::hinata::find_devices;
+    use crate::find_devices;
     #[tokio::test]
     async fn pair_device() {
         let builders = find_devices().await.unwrap();

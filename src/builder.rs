@@ -4,8 +4,8 @@ use std::thread;
 use hidapi::{HidApi, HidDevice, HidError};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::{Receiver, Sender};
-use crate::hinata::device::{Config, HinataDevice, Info};
-use crate::hinata::message::{InMessage, OutMessage, Subscription};
+use crate::device::{Config, HinataDevice, Info};
+use crate::message::{InMessage, OutMessage, Subscription};
 
 const HINATA_VID: u16 = 0xF822;
 const USAGE_PAGE_READ: u16 = 1;

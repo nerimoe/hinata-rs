@@ -2,9 +2,9 @@ use async_trait::async_trait;
 use tokio::sync::mpsc::{Receiver, Sender};
 use std::thread::{JoinHandle};
 use std::time::Duration;
-use crate::hinata::error::Error;
-use crate::hinata::message::{InMessage, OutMessage, Subscription, UnSubscribePolicy};
-use crate::hinata::pn532::{Pn532, Pn532Command, Pn532Direction, Pn532Packet, Pn532Port};
+use crate::error::Error;
+use crate::message::{InMessage, OutMessage, Subscription, UnSubscribePolicy};
+use crate::pn532::{Pn532, Pn532Command, Pn532Direction, Pn532Packet, Pn532Port};
 
 #[derive(Debug)]
 pub(crate) struct Info {
