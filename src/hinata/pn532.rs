@@ -3,9 +3,10 @@ use async_trait::async_trait;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
 use thiserror::Error;
-use crate::card::{Felica, Iso14443a, PassiveTarget};
-use crate::error::Error;
+use crate::hinata::card::{Felica, Iso14443a, PassiveTarget};
+use crate::hinata::error::Error;
 use byteorder::{BigEndian, ReadBytesExt};
+
 
 #[derive(FromPrimitive, ToPrimitive, Copy, Clone, Debug, PartialEq)]
 #[repr(u8)]

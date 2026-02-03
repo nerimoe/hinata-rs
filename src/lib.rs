@@ -1,13 +1,8 @@
+pub mod utils;
 pub mod hinata;
-pub mod spad0;
-pub mod card;
-pub mod pn532;
-pub mod error;
 
 #[cfg(test)]
 mod tests {
-    use tokio::task::spawn_blocking;
-    use crate::hinata;
     use crate::hinata::find_devices;
     #[tokio::test]
     async fn pair_device() {
@@ -22,7 +17,7 @@ mod tests {
 
     #[tokio::test]
     async fn pair_device_no_panic() {
-        if let Ok(builders) = hinata::find_devices().await {
+        if let Ok(builders) = find_devices().await {
 
             let mut devices = Vec::new();
 
@@ -31,7 +26,8 @@ mod tests {
             }
 
             if let Some(device) = devices.get_mut(0) {
-                println!("{:?}", device.get_firmware_timestamp().await)
+                println!("{:?}", device.get_firmware_timestamp().await);
+                println!("{:?}", device.pn532().in_list_passive_target(0, 1, &[]).await);
             }
         }
     }

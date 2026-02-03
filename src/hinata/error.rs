@@ -1,7 +1,7 @@
 use std::num::ParseIntError;
 use std::string::FromUtf8Error;
 use thiserror::Error;
-use crate::pn532::Pn532Error;
+use crate::hinata::pn532::Pn532Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
