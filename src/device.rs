@@ -68,6 +68,10 @@ impl HinataDevice {
         }
     }
 
+    pub fn get_instance_id(&self) -> String {
+        self.instance_id.to_string()
+    }
+
     async fn receive_packet(rx: &mut Receiver<OutMessage>, timeout: Duration) -> Result<Vec<u8>, Error> {
         tokio::select!{
             message = rx.recv() => {

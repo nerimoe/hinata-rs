@@ -154,7 +154,7 @@ pub(crate) fn get_instance(path: &str) -> Option<String> {
 // =========================================================================
 
 #[cfg(not(target_os = "macos"))]
-pub(crate) fn find_devices_inner() -> Result<Vec<HinataDeviceBuilder>, HidError> {
+pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDeviceBuilder>, HidError> {
     struct PreDeviceBuilder {
         read: Option<HidDevice>,
         write: Option<HidDevice>
@@ -166,8 +166,9 @@ pub(crate) fn find_devices_inner() -> Result<Vec<HinataDeviceBuilder>, HidError>
     for device in hid.device_list() {
         if device.vendor_id() != HINATA_VID { continue; }
 
-        if let Some(key) = get_instance(&device.path().to_string_lossy()) {
-            let entry = devices.entry(key).or_insert(PreDeviceBuilder { read: None, write: None });
+        if let Some(instance) = get_instance(&device.path().to_string_lossy()) {
+            if exclude.contains(&instance) { continue };
+            let entry = devices.entry(instance).or_insert(PreDeviceBuilder { read: None, write: None });
 
             if device.usage_page() == USAGE_PAGE_READ {
                 entry.read = Some(device.open_device(&hid)?);
@@ -188,7 +189,7 @@ pub(crate) fn find_devices_inner() -> Result<Vec<HinataDeviceBuilder>, HidError>
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn find_devices_inner() -> Result<Vec<HinataDeviceBuilder>, HidError> {
+pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDeviceBuilder>, HidError> {
     let hid = HidApi::new()?;
     let mut devices = Vec::new();
 
@@ -196,6 +197,7 @@ pub(crate) fn find_devices_inner() -> Result<Vec<HinataDeviceBuilder>, HidError>
         // MacOS 通常只需要匹配 Usage Page Write 对应的设备即可打开 IOConnect
         if device.vendor_id() == HINATA_VID && device.usage_page() == USAGE_PAGE_WRITE {
             if let Some(instance) = get_instance(&device.path().to_string_lossy()) {
+                if exclude.contains(&instance) { continue };
                 if let Ok(rw) = device.open_device(&hid) {
                     devices.push(HinataDeviceBuilder {
                         connection: HidConnection { inner: rw }, // 使用统一封装

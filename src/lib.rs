@@ -10,8 +10,8 @@ use tokio::task::spawn_blocking;
 use error::Error;
 use crate::builder::{find_devices_inner, HinataDeviceBuilder};
 
-pub async fn find_devices() -> Result<Vec<HinataDeviceBuilder>, Error> {
-    spawn_blocking(|| find_devices_inner().map_err(|_| Error::NotFound("Device not found".to_string()))).await.map_err(|e| Error::Other(e.to_string()))?
+pub async fn find_devices(exclude: Vec<String>) -> Result<Vec<HinataDeviceBuilder>, Error> {
+    spawn_blocking(|| find_devices_inner(exclude).map_err(|_| Error::NotFound("Device not found".to_string()))).await.map_err(|e| Error::Other(e.to_string()))?
 }
 
 #[cfg(test)]
@@ -19,7 +19,7 @@ mod tests {
     use crate::find_devices;
     #[tokio::test]
     async fn pair_device() {
-        let builders = find_devices().await.unwrap();
+        let builders = find_devices(vec![]).await.unwrap();
         let mut devices = Vec::new();
         for builder in builders {
             devices.push(builder.build(false).await)
@@ -30,7 +30,7 @@ mod tests {
 
     #[tokio::test]
     async fn pair_device_no_panic() {
-        if let Ok(builders) = find_devices().await {
+        if let Ok(builders) = find_devices(vec![]).await {
 
             let mut devices = Vec::new();
 
