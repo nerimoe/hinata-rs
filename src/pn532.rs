@@ -4,7 +4,7 @@ use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
 use thiserror::Error;
 use crate::card::{Felica, Iso14443a, PassiveTarget};
-use crate::error::Error;
+use crate::error::{Error, HinataResult};
 use byteorder::{BigEndian, ReadBytesExt};
 
 
@@ -237,7 +237,7 @@ impl Pn532Packet {
 
 #[async_trait]
 pub trait Pn532Port {
-    async fn request(&mut self, pn532_cmd: Pn532Command, payload: &[u8]) -> Result<Vec<u8>, Error>;
+    async fn request(&mut self, pn532_cmd: Pn532Command, payload: &[u8]) -> HinataResult<Vec<u8>>;
 }
 
 pub struct Pn532<'a, P: Pn532Port> {
@@ -251,7 +251,7 @@ impl <'a, P: Pn532Port> Pn532<'a, P> {
         }
     }
 
-    pub async fn in_list_passive_target(&mut self, brty: u8, max_tg: u8, initial_data: &[u8]) -> Result<Vec<PassiveTarget>, Error> {
+    pub async fn in_list_passive_target(&mut self, brty: u8, max_tg: u8, initial_data: &[u8]) -> HinataResult<Vec<PassiveTarget>> {
         let mut payload = vec![max_tg, brty];
         payload.extend_from_slice(initial_data);
         let res = self.port.request(Pn532Command::InListPassiveTarget, &payload).await?;
@@ -259,7 +259,7 @@ impl <'a, P: Pn532Port> Pn532<'a, P> {
     }
 
 
-    fn get_error_code(data: &[u8]) -> Result<(), Error> {
+    fn get_error_code(data: &[u8]) -> HinataResult<()> {
         let status_byte = data.get(0).ok_or(Error::Protocol("Empty response from InDataExchange".into()))?;
         let error = Pn532Error::from_u8(*status_byte).ok_or(Error::Protocol(format!("Unknown status code from PN532: {status_byte}")))?;
         if error == Pn532Error::None {
@@ -269,7 +269,7 @@ impl <'a, P: Pn532Port> Pn532<'a, P> {
         }
     }
 
-    pub async fn in_data_exchange(&mut self, tg: u8, cmd: u8, data: &[u8]) -> Result<Vec<u8>, Error> {
+    pub async fn in_data_exchange(&mut self, tg: u8, cmd: u8, data: &[u8]) -> HinataResult<Vec<u8>> {
         let mut payload = vec![tg, cmd];
         payload.extend_from_slice(data);
         let res = self.port.request(Pn532Command::InDataExchange, &payload).await?;
@@ -277,7 +277,7 @@ impl <'a, P: Pn532Port> Pn532<'a, P> {
         Ok(res)
     }
 
-    pub async fn mifare_classic_auth(&mut self, tg: u8, uid: &[u8], block_num: u8, key_num: MifareCommand, key: &[u8]) -> Result<(), Error> {
+    pub async fn mifare_classic_auth(&mut self, tg: u8, uid: &[u8], block_num: u8, key_num: MifareCommand, key: &[u8]) -> HinataResult<()> {
         let mut input = vec![block_num];
         input.extend_from_slice(key.get(..6).ok_or(Error::Protocol("Mifare key must be 6 bytes".into()))?);
         input.extend_from_slice(uid.get(..4).ok_or(Error::Protocol("Mifare UID must be at least 4 bytes for auth".into()))?);
@@ -285,14 +285,14 @@ impl <'a, P: Pn532Port> Pn532<'a, P> {
         Ok(())
     }
 
-    pub async fn mifare_classic_write_block(&mut self, tg: u8, block_num: u8, data: &[u8]) -> Result<(), Error> {
+    pub async fn mifare_classic_write_block(&mut self, tg: u8, block_num: u8, data: &[u8]) -> HinataResult<()> {
         let mut input = vec![block_num];
         input.extend_from_slice(data.get(..16).ok_or(Error::Protocol("Mifare block data must be 16 bytes".into()))?);
         self.in_data_exchange(tg, MifareCommand::Write as u8, &input).await?;
         Ok(())
     }
 
-    pub async fn mifare_classic_read_block(&mut self, tg: u8, block_num: u8) -> Result<[u8; 16], Error>{
+    pub async fn mifare_classic_read_block(&mut self, tg: u8, block_num: u8) -> HinataResult<[u8; 16]>{
         let input = [block_num];
         let res = self.in_data_exchange(tg, MifareCommand::Read as u8, &input).await?;
 
@@ -303,17 +303,17 @@ impl <'a, P: Pn532Port> Pn532<'a, P> {
 
     }
 
-    pub async fn in_release(&mut self, tg: u8) -> Result<(), Error> {
+    pub async fn in_release(&mut self, tg: u8) -> HinataResult<()> {
         let res = self.port.request(Pn532Command::InRelease, &[tg]).await?;
         Self::get_error_code(&res)
     }
 
-    pub async fn in_select(&mut self, tg: u8) -> Result<(), Error> {
+    pub async fn in_select(&mut self, tg: u8) -> HinataResult<()> {
         let res = self.port.request(Pn532Command::InSelect, &[tg]).await?;
         Self::get_error_code(&res)
     }
 
-    pub async fn felica_read_without_encryption(&mut self, tg: u8, idm: &[u8], services: &[u16], blocks: &[u16]) -> Result<Vec<u8>, Error> {
+    pub async fn felica_read_without_encryption(&mut self, tg: u8, idm: &[u8], services: &[u16], blocks: &[u16]) -> HinataResult<Vec<u8>> {
         let mut input = vec![FelicaCommand::ReadWithoutEncryption as u8];
         input.extend_from_slice(idm.get(..8).ok_or(Error::Protocol("Felica IDM must be 8 bytes".to_string()))?);
         input.push(services.len() as u8);
@@ -330,7 +330,7 @@ impl <'a, P: Pn532Port> Pn532<'a, P> {
     }
 }
 
-fn parse_in_list_passive_target(data: &[u8], brty: u8) -> Result<Vec<PassiveTarget>, Error> {
+fn parse_in_list_passive_target(data: &[u8], brty: u8) -> HinataResult<Vec<PassiveTarget>> {
     let mut cursor = Cursor::new(data);
 
     let tag_num = cursor.read_u8()?;

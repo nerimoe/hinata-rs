@@ -33,6 +33,8 @@ pub enum Error {
     Other(String),
 }
 
+pub type HinataResult<T> = Result<T, Error>;
+
 impl From<FromUtf8Error> for Error {
     fn from(e: FromUtf8Error) -> Self {
         Error::Parse(e.to_string())

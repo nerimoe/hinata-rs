@@ -9,9 +9,12 @@ pub mod utils;
 use tokio::task::spawn_blocking;
 use error::Error;
 use crate::builder::{find_devices_inner, HinataDeviceBuilder};
+use crate::error::HinataResult;
 
-pub async fn find_devices(exclude: Vec<String>) -> Result<Vec<HinataDeviceBuilder>, Error> {
-    spawn_blocking(|| find_devices_inner(exclude).map_err(|_| Error::NotFound("Device not found".to_string()))).await.map_err(|e| Error::Other(e.to_string()))?
+pub async fn find_devices(exclude: Vec<String>) -> HinataResult<Vec<HinataDeviceBuilder>> {
+    spawn_blocking(|| find_devices_inner(exclude)
+        .map_err(|_| Error::NotFound("Device not found".to_string()))).await
+        .map_err(|e| Error::Other(e.to_string()))?
 }
 
 #[cfg(test)]

@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use tokio::sync::mpsc::{Receiver, Sender};
 use std::thread::{JoinHandle};
 use std::time::Duration;
-use crate::error::Error;
+use crate::error::{Error, HinataResult};
 use crate::message::{InMessage, OutMessage, Subscription, UnSubscribePolicy};
 use crate::pn532::{Pn532, Pn532Command, Pn532Direction, Pn532Packet, Pn532Port};
 
@@ -33,7 +33,7 @@ pub struct HinataDevice {
 
 #[async_trait]
 impl Pn532Port for HinataDevice {
-    async fn request(&mut self, pn532_cmd: Pn532Command, payload: &[u8]) -> Result<Vec<u8>, Error> {
+    async fn request(&mut self, pn532_cmd: Pn532Command, payload: &[u8]) -> HinataResult<Vec<u8>> {
         let (subscription, mut rx) = Subscription::new(UnSubscribePolicy::SpecificNotOn(4, 0));
         let packet = Pn532Packet::new(Pn532Direction::HostToPn532, pn532_cmd, payload.to_vec());
         let mut send = vec![1, 0xE2];
@@ -72,7 +72,7 @@ impl HinataDevice {
         self.instance_id.to_string()
     }
 
-    async fn receive_packet(rx: &mut Receiver<OutMessage>, timeout: Duration) -> Result<Vec<u8>, Error> {
+    async fn receive_packet(rx: &mut Receiver<OutMessage>, timeout: Duration) -> HinataResult<Vec<u8>> {
         tokio::select!{
             message = rx.recv() => {
                 if let Some(data) = message {
@@ -94,7 +94,7 @@ impl HinataDevice {
         packet.extend_from_slice(payload);
         let _ = self.tx.send(InMessage::SendPacket(packet)).await;
     }
-    async fn request(&mut self, cmd: u8, payload: &[u8]) -> Result<Vec<u8>, Error> {
+    async fn request(&mut self, cmd: u8, payload: &[u8]) -> HinataResult<Vec<u8>> {
         let mut packet = vec![1, cmd];
         packet.extend_from_slice(payload);
         let (subscription, mut rx) = Subscription::new(UnSubscribePolicy::Count(1));
@@ -107,7 +107,7 @@ impl HinataDevice {
         Pn532::new(self)
     }
 
-    pub async fn get_firmware_timestamp(&mut self) -> Result<u32, Error> {
+    pub async fn get_firmware_timestamp(&mut self) -> HinataResult<u32> {
         if self.info.firmware_timestamp > 0 {return Ok(self.info.firmware_timestamp)}
         let raw = self.request(1, &[]).await?;
         let str = String::from_utf8(raw[..10].to_vec())?;
@@ -124,7 +124,7 @@ impl HinataDevice {
 
     pub async fn enter_bootloader(&mut self) { self.request_without_response(0xF0, &[]).await }
 
-    pub async fn get_chip_id(&mut self) -> Result<[u8; 4], Error> {
+    pub async fn get_chip_id(&mut self) -> HinataResult<[u8; 4]> {
         let timestamp = self.get_firmware_timestamp().await?;
         if timestamp < 2025051301 { return Err(Error::NotSupport("Firmware version too old".into())) };
         let chip_id = if let Some(id) = self.info.chip_id {
@@ -138,14 +138,14 @@ impl HinataDevice {
         Ok(chip_id)
     }
 
-    fn get_four_bytes(data: &[u8]) -> Result<[u8; 4], Error> {
+    fn get_four_bytes(data: &[u8]) -> HinataResult<[u8; 4]> {
         let array: [u8; 4] = data.get(..4)
             .and_then(|slice| slice.try_into().ok())
             .ok_or(Error::Protocol("buffer size error".into()))?;
         Ok(array)
     }
 
-    pub async fn get_firmware_commit_hash(&mut self) -> Result<[u8; 4], Error> {
+    pub async fn get_firmware_commit_hash(&mut self) -> HinataResult<[u8; 4]> {
         let timestamp = self.get_firmware_timestamp().await?;
         if timestamp < 2025051301 { return Err(Error::NotSupport("Firmware version too old".into())) };
         let commit_hash = if let Some(hash) = self.info.firmware_commit_hash {
