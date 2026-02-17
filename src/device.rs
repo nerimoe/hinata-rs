@@ -163,4 +163,9 @@ impl HinataDevice {
         };
         Ok(commit_hash)
     }
+
+    pub fn get_device_name(&self) -> String {self.device_name.clone()}
+
+    pub fn get_product_id(&self) -> u16 { self.pid }
+
 }
