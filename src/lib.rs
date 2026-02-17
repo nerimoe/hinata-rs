@@ -1,5 +1,5 @@
 mod message;
-mod builder;
+pub mod builder;
 pub mod device;
 pub mod card;
 pub mod pn532;
