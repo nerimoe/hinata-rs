@@ -28,6 +28,9 @@ pub struct HinataDevice {
     loop_handler: Option<JoinHandle<()>>,
     instance_id: String,
 
+    device_name: String,
+    pid: u16,
+
     tx: Sender<InMessage>,
 }
 
@@ -58,12 +61,14 @@ impl Pn532Port for HinataDevice {
 
 impl HinataDevice {
 
-    pub(crate) fn new(info: Info, config: Config, loop_handler: Option<JoinHandle<()>>, instance_id: String, tx: Sender<InMessage>) -> Self {
+    pub(crate) fn new(info: Info, config: Config, loop_handler: Option<JoinHandle<()>>, instance_id: String, tx: Sender<InMessage>, device_name: String, pid: u16) -> Self {
         Self {
             info,
             config,
             loop_handler,
             instance_id,
+            device_name,
+            pid,
             tx,
         }
     }

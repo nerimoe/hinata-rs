@@ -25,7 +25,7 @@ mod tests {
         let builders = find_devices(vec![]).await.unwrap();
         let mut devices = Vec::new();
         for builder in builders {
-            devices.push(builder.build(false).await)
+            devices.push(builder.build(false))
         }
 
         println!("{:?}", devices);
@@ -38,7 +38,7 @@ mod tests {
             let mut devices = Vec::new();
 
             for builder in builders {
-                let Ok(dev) = builder.build(false).await else {
+                let Ok(dev) = builder.build(false) else {
                     continue
                 };
                 devices.push(dev)

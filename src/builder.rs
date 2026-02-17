@@ -85,10 +85,12 @@ impl HidConnection {
 pub struct HinataDeviceBuilder {
     connection: HidConnectionBuilder,
     instance_id: String,
+    device_name: String,
+    pid: u16
 }
 
 impl HinataDeviceBuilder {
-    pub async fn build(self, debug: bool) -> HinataResult<HinataDevice> {
+    pub fn build(&self, debug: bool) -> HinataResult<HinataDevice> {
         let (main_to_sub_tx, main_to_sub_rx): (Sender<InMessage>, Receiver<InMessage>) = mpsc::channel(255);
         let conn = self.connection.build()?;
 
@@ -100,8 +102,10 @@ impl HinataDeviceBuilder {
             Info { firmware_timestamp: 0, firmware_commit_hash: None, chip_id: None },
             Config { sega_brightness: 0, sega_rapid_scan: false },
             Some(handler),
-            self.instance_id,
+            self.instance_id.clone(),
             main_to_sub_tx,
+            self.device_name.clone(),
+            self.pid,
         ))
     }
 
@@ -194,7 +198,9 @@ pub(crate) fn get_instance(path: &str) -> Option<String> {
 pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDeviceBuilder>, HidError> {
     struct PreDeviceBuilder {
         read: Option<CString>,
-        write: Option<CString>
+        write: Option<CString>,
+        device_name: Option<String>,
+        pid: Option<u16>
     }
 
     let mut hid = HidApi::new()?;
@@ -207,7 +213,12 @@ pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDevic
 
         if let Some(instance) = get_instance(&device.path().to_string_lossy()) {
             if exclude.contains(&instance) { continue };
-            let entry = devices.entry(instance).or_insert(PreDeviceBuilder { read: None, write: None });
+            let entry = devices.entry(instance).or_insert(
+                PreDeviceBuilder {
+                    read: None, write: None,
+                    device_name: device.product_string().map(|s| s.to_string()),
+                    pid: Some(device.product_id())
+                });
 
             if device.usage_page() == USAGE_PAGE_READ {
                 entry.read = Some(device.path().to_owned());
@@ -218,12 +229,18 @@ pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDevic
     }
 
     Ok(devices.into_iter().filter_map(|(instance, builder)| {
-        builder.read.zip(builder.write).map(|(read, write)| {
-            HinataDeviceBuilder {
-                connection: HidConnectionBuilder { read, write }, // 使用统一封装
-                instance_id: instance,
-            }
-        })
+        if let PreDeviceBuilder { read: Some(r), write: Some(w), device_name: Some(n), pid: Some(p)} = builder {
+            Some(
+                HinataDeviceBuilder {
+                    connection: HidConnectionBuilder { read: r, write: w }, // 使用统一封装
+                    instance_id: instance,
+                    device_name: n,
+                    pid: p,
+                }
+            )
+        } else {
+            None
+        }
     }).collect())
 }
 
