@@ -212,3 +212,21 @@ pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDevic
     }
     Ok(devices)
 }
+
+#[test]
+fn test_hid_init() {
+    let start = std::time::Instant::now();
+    let mut hid = HidApi::new().unwrap();
+    hid.add_devices(HINATA_VID, 0).unwrap();
+    let duration = start.elapsed();
+    println!("Time elapsed: {:?}", duration);
+}
+
+#[test]
+fn test_hid_all_init() {
+    let start = std::time::Instant::now();
+    let mut hid = HidApi::new().unwrap();
+    hid.add_devices(0, 0).unwrap();
+    let duration = start.elapsed();
+    println!("Time elapsed: {:?}", duration);
+}
