@@ -9,5 +9,5 @@ num-derive = "0.4.2"
 num-traits = "0.2.19"
 byteorder = "1.5.0"
 async-trait = "0.1.89"
-hidapi = "2.6.4"
+hidapi = { git = "https://github.com/nerimoe/hidapi-rs" }
 tokio = { version = "1.49.0", features = ["full"] }

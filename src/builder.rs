@@ -160,7 +160,9 @@ pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDevic
         write: Option<HidDevice>
     }
 
-    let hid = HidApi::new()?;
+    let mut hid = HidApi::new()?;
+    hid.add_devices(HINATA_VID, 0)?;
+
     let mut devices: HashMap<String, PreDeviceBuilder> = HashMap::new();
 
     for device in hid.device_list() {
@@ -190,11 +192,12 @@ pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDevic
 
 #[cfg(target_os = "macos")]
 pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDeviceBuilder>, HidError> {
-    let hid = HidApi::new()?;
+    let mut hid = HidApi::new()?;
+    hid.add_devices(HINATA_VID, 0)?;
+
     let mut devices = Vec::new();
 
     for device in hid.device_list() {
-        // MacOS 通常只需要匹配 Usage Page Write 对应的设备即可打开 IOConnect
         if device.vendor_id() == HINATA_VID && device.usage_page() == USAGE_PAGE_WRITE {
             if let Some(instance) = get_instance(&device.path().to_string_lossy()) {
                 if exclude.contains(&instance) { continue };
