@@ -38,7 +38,10 @@ mod tests {
             let mut devices = Vec::new();
 
             for builder in builders {
-                devices.push(builder.build(false).await)
+                let Ok(dev) = builder.build(false).await else {
+                    continue
+                };
+                devices.push(dev)
             }
 
             if let Some(device) = devices.get_mut(0) {

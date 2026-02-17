@@ -1,5 +1,6 @@
 use std::num::ParseIntError;
 use std::string::FromUtf8Error;
+use hidapi::HidError;
 use thiserror::Error;
 use crate::pn532::Pn532Error;
 
@@ -28,6 +29,9 @@ pub enum Error {
 
     #[error("Protocol Error: {0}")]
     Protocol(String),
+
+    #[error("Hid Error: {0}")]
+    HidError(#[from] HidError),
 
     #[error("Other Error: {0}")]
     Other(String),

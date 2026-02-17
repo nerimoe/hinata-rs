@@ -1,15 +1,52 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::ffi::CString;
 use std::thread;
 use hidapi::{HidApi, HidDevice, HidError};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::{Receiver, Sender};
 use crate::device::{Config, HinataDevice, Info};
+use crate::error::HinataResult;
 use crate::message::{InMessage, OutMessage, Subscription};
 
 const HINATA_VID: u16 = 0xF822;
 const USAGE_PAGE_READ: u16 = 1;
 const USAGE_PAGE_WRITE: u16 = 0x06;
+
+#[derive(Debug)]
+struct HidConnectionBuilder {
+    #[cfg(target_os = "macos")]
+    inner: CString,
+
+    #[cfg(not(target_os = "macos"))]
+    read: CString,
+    #[cfg(not(target_os = "macos"))]
+    write: CString,
+}
+
+impl HidConnectionBuilder {
+
+    #[cfg(target_os = "macos")]
+    fn build(&self) -> Result<HidConnection, HidError> {
+        let api = HidApi::new().unwrap();
+        Ok(
+            HidConnection {
+                inner: api.open_path(&self.inner)?
+            }
+        )
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn build(&self) -> Result<HidConnection, HidError> {
+        let api = HidApi::new()?;
+        Ok(
+            HidConnection {
+                read: api.open_path(&self.read)?,
+                write: api.open_path(&self.write)?
+            }
+        )
+    }
+}
 
 #[derive(Debug)]
 struct HidConnection {
@@ -46,26 +83,26 @@ impl HidConnection {
 
 #[derive(Debug)]
 pub struct HinataDeviceBuilder {
-    connection: HidConnection,
+    connection: HidConnectionBuilder,
     instance_id: String,
 }
 
 impl HinataDeviceBuilder {
-    pub async fn build(self, debug: bool) -> HinataDevice {
+    pub async fn build(self, debug: bool) -> HinataResult<HinataDevice> {
         let (main_to_sub_tx, main_to_sub_rx): (Sender<InMessage>, Receiver<InMessage>) = mpsc::channel(255);
+        let conn = self.connection.build()?;
 
-        // 这里的 move 会把 self.connection (包含 underlying HidDevices) 移动进线程
         let handler = thread::spawn(move || {
-            Self::io_loop(self.connection, main_to_sub_rx, debug)
+            Self::io_loop(conn, main_to_sub_rx, debug)
         });
 
-        HinataDevice::new(
+        Ok(HinataDevice::new(
             Info { firmware_timestamp: 0, firmware_commit_hash: None, chip_id: None },
             Config { sega_brightness: 0, sega_rapid_scan: false },
             Some(handler),
             self.instance_id,
             main_to_sub_tx,
-        )
+        ))
     }
 
     pub fn get_instance_id(&self) -> String {
@@ -156,8 +193,8 @@ pub(crate) fn get_instance(path: &str) -> Option<String> {
 #[cfg(not(target_os = "macos"))]
 pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDeviceBuilder>, HidError> {
     struct PreDeviceBuilder {
-        read: Option<HidDevice>,
-        write: Option<HidDevice>
+        read: Option<CString>,
+        write: Option<CString>
     }
 
     let mut hid = HidApi::new()?;
@@ -173,9 +210,9 @@ pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDevic
             let entry = devices.entry(instance).or_insert(PreDeviceBuilder { read: None, write: None });
 
             if device.usage_page() == USAGE_PAGE_READ {
-                entry.read = Some(device.open_device(&hid)?);
+                entry.read = Some(device.path().to_owned());
             } else if device.usage_page() == USAGE_PAGE_WRITE {
-                entry.write = Some(device.open_device(&hid)?);
+                entry.write = Some(device.path().to_owned());
             }
         }
     }
@@ -183,7 +220,7 @@ pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDevic
     Ok(devices.into_iter().filter_map(|(instance, builder)| {
         builder.read.zip(builder.write).map(|(read, write)| {
             HinataDeviceBuilder {
-                connection: HidConnection { read, write }, // 使用统一封装
+                connection: HidConnectionBuilder { read, write }, // 使用统一封装
                 instance_id: instance,
             }
         })
@@ -201,12 +238,10 @@ pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDevic
         if device.vendor_id() == HINATA_VID && device.usage_page() == USAGE_PAGE_WRITE {
             if let Some(instance) = get_instance(&device.path().to_string_lossy()) {
                 if exclude.contains(&instance) { continue };
-                if let Ok(rw) = device.open_device(&hid) {
-                    devices.push(HinataDeviceBuilder {
-                        connection: HidConnection { inner: rw }, // 使用统一封装
-                        instance_id: instance,
-                    });
-                };
+                devices.push(HinataDeviceBuilder {
+                    connection: HidConnectionBuilder { inner: device.path().to_owned() }, // 使用统一封装
+                    instance_id: instance,
+                });
             };
         }
     }
