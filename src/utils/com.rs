@@ -12,7 +12,7 @@ pub fn get_com_port_by_hid_instance(instance: &str) -> HinataResult<String> {
     get_com_port_by_instance_id(&com_instance)
 }
 
-fn get_com_instance_id_by_hid_instance_id(instance_id: &str) -> HinataResult<String> {
+pub fn get_com_instance_id_by_hid_instance_id(instance_id: &str) -> HinataResult<String> {
     unsafe {
         // 1. 准备字符串
         let input_id_wide: Vec<u16> = instance_id

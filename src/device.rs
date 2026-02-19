@@ -6,7 +6,7 @@ use crate::error::{Error, HinataResult};
 use crate::message::{InMessage, OutMessage, Subscription, UnSubscribePolicy};
 use crate::pn532::{Pn532, Pn532Command, Pn532Direction, Pn532Packet, Pn532Port};
 use crate::types::HidDevicePath;
-use crate::utils::com::get_com_port_by_hid_instance;
+use crate::utils::com::{get_com_instance_id_by_hid_instance_id, get_com_port_by_hid_instance};
 
 #[derive(Debug)]
 pub(crate) struct Info {
@@ -179,5 +179,9 @@ impl HinataDevice {
 
     pub fn get_path_write(&self) -> String {
         self.info.path.write.to_string()
+    }
+
+    pub fn get_com_instance_id(&self) -> HinataResult<String> {
+        get_com_instance_id_by_hid_instance_id(&self.info.path.read)
     }
 }
