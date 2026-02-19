@@ -25,7 +25,7 @@ mod tests {
     async fn pair_device() {
         let builders = find_devices(vec![]).await.unwrap();
         let mut devices = Vec::new();
-        for mut builder in builders {
+        for builder in builders {
             devices.push(builder.build(false))
         }
 
@@ -38,7 +38,7 @@ mod tests {
 
             let mut devices = Vec::new();
 
-            for mut builder in builders {
+            for builder in builders {
                 let Ok(dev) = builder.build(false) else {
                     continue
                 };
