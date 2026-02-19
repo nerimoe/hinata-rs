@@ -5,12 +5,19 @@ use std::time::Duration;
 use crate::error::{Error, HinataResult};
 use crate::message::{InMessage, OutMessage, Subscription, UnSubscribePolicy};
 use crate::pn532::{Pn532, Pn532Command, Pn532Direction, Pn532Packet, Pn532Port};
+use crate::types::HidDevicePath;
+use crate::utils;
 
 #[derive(Debug)]
 pub(crate) struct Info {
     pub firmware_timestamp: u32,
     pub firmware_commit_hash: Option<[u8; 4]>,
-    pub chip_id: Option<[u8; 4]>
+    pub chip_id: Option<[u8; 4]>,
+
+    pub instance_id: String,
+    pub path: HidDevicePath,
+    pub device_name: String,
+    pub pid: u16,
 }
 
 #[derive(Debug)]
@@ -26,10 +33,7 @@ pub struct HinataDevice {
     info: Info,
     config: Config,
     loop_handler: Option<JoinHandle<()>>,
-    instance_id: String,
 
-    device_name: String,
-    pid: u16,
 
     tx: Sender<InMessage>,
 }
@@ -61,20 +65,17 @@ impl Pn532Port for HinataDevice {
 
 impl HinataDevice {
 
-    pub(crate) fn new(info: Info, config: Config, loop_handler: Option<JoinHandle<()>>, instance_id: String, tx: Sender<InMessage>, device_name: String, pid: u16) -> Self {
+    pub(crate) fn new(info: Info, config: Config, loop_handler: Option<JoinHandle<()>>, tx: Sender<InMessage>) -> Self {
         Self {
             info,
             config,
             loop_handler,
-            instance_id,
-            device_name,
-            pid,
             tx,
         }
     }
 
     pub fn get_instance_id(&self) -> String {
-        self.instance_id.to_string()
+        self.info.instance_id.to_string()
     }
 
     async fn receive_packet(rx: &mut Receiver<OutMessage>, timeout: Duration) -> HinataResult<Vec<u8>> {
@@ -164,8 +165,20 @@ impl HinataDevice {
         Ok(commit_hash)
     }
 
-    pub fn get_device_name(&self) -> String {self.device_name.clone()}
+    pub fn get_device_name(&self) -> String {self.info.device_name.clone()}
 
-    pub fn get_product_id(&self) -> u16 { self.pid }
+    pub fn get_product_id(&self) -> u16 { self.info.pid }
 
+    pub fn get_com_port(&self) -> HinataResult<String> {
+        let path = utils::com::get_com_instance_id_by_hid_instance_id(&self.info.path.read)?;
+        utils::com::get_com_port_by_instance_id(&path)
+    }
+
+    pub fn get_path_read(&self) -> String {
+        self.info.path.read.to_string()
+    }
+
+    pub fn get_path_write(&self) -> String {
+        self.info.path.write.to_string()
+    }
 }

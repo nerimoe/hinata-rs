@@ -8,6 +8,9 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use crate::device::{Config, HinataDevice, Info};
 use crate::error::HinataResult;
 use crate::message::{InMessage, OutMessage, Subscription};
+use crate::{find_devices, utils};
+use crate::types::HidDevicePath;
+use crate::utils::device_parse::{parse_hid_path};
 
 const HINATA_VID: u16 = 0xF822;
 const USAGE_PAGE_READ: u16 = 1;
@@ -17,11 +20,11 @@ const USAGE_PAGE_WRITE: u16 = 0x06;
 struct HidConnectionBuilder {
     #[cfg(target_os = "macos")]
     inner: CString,
-
     #[cfg(not(target_os = "macos"))]
     read: CString,
     #[cfg(not(target_os = "macos"))]
     write: CString,
+    path: HidDevicePath
 }
 
 impl HidConnectionBuilder {
@@ -42,7 +45,7 @@ impl HidConnectionBuilder {
         Ok(
             HidConnection {
                 read: api.open_path(&self.read)?,
-                write: api.open_path(&self.write)?
+                write: api.open_path(&self.write)?,
             }
         )
     }
@@ -77,16 +80,12 @@ impl HidConnection {
     }
 }
 
-// =========================================================================
-// 2. 统一的 Builder 和 核心逻辑
-// =========================================================================
-
 #[derive(Debug)]
 pub struct HinataDeviceBuilder {
     connection: HidConnectionBuilder,
     instance_id: String,
     device_name: String,
-    pid: u16
+    pid: u16,
 }
 
 impl HinataDeviceBuilder {
@@ -98,14 +97,21 @@ impl HinataDeviceBuilder {
             Self::io_loop(conn, main_to_sub_rx, debug)
         });
 
+        let info = Info {
+            firmware_timestamp: 0,
+            firmware_commit_hash: None,
+            chip_id: None,
+            instance_id: self.instance_id.clone(),
+            path: self.connection.path.clone(),
+            device_name: self.device_name.clone(),
+            pid: self.pid,
+        };
+
         Ok(HinataDevice::new(
-            Info { firmware_timestamp: 0, firmware_commit_hash: None, chip_id: None },
+            info,
             Config { sega_brightness: 0, sega_rapid_scan: false },
             Some(handler),
-            self.instance_id.clone(),
             main_to_sub_tx,
-            self.device_name.clone(),
-            self.pid,
         ))
     }
 
@@ -114,6 +120,11 @@ impl HinataDeviceBuilder {
     }
 
     pub fn get_device_name(&self) -> String {self.device_name.clone()}
+
+    pub fn get_com_port(&self) -> HinataResult<String> {
+        let path = utils::com::get_com_instance_id_by_hid_instance_id(&self.connection.path.read)?;
+        utils::com::get_com_port_by_instance_id(&path)
+    }
 
     pub fn get_product_id(&self) -> u16 { self.pid }
 
@@ -178,31 +189,11 @@ impl HinataDeviceBuilder {
     }
 }
 
-#[cfg(target_os = "windows")]
-pub(crate) fn get_instance(path: &str) -> Option<String> {
-    let parts: Vec<&str> = path.split('#').collect();
-    if parts.len() < 3 { return None; }
-    let instance_id_full = parts[2];
-    if let Some(last_amp_index) = instance_id_full.rfind('&') {
-        return Some(instance_id_full[..last_amp_index].to_string());
-    }
-    Some(instance_id_full.to_string())
-}
-
-#[cfg(not(target_os = "windows"))]
-pub(crate) fn get_instance(path: &str) -> Option<String> {
-    Some(path.to_string())
-}
-
-// =========================================================================
-// 4. 设备发现逻辑 (仍然需要区分 OS，因为配对逻辑不同)
-// =========================================================================
-
 #[cfg(not(target_os = "macos"))]
 pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDeviceBuilder>, HidError> {
     struct PreDeviceBuilder {
-        read: Option<CString>,
-        write: Option<CString>,
+        read: Option<(CString, String)>,
+        write: Option<(CString, String)>,
         device_name: Option<String>,
         pid: Option<u16>
     }
@@ -215,7 +206,7 @@ pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDevic
     for device in hid.device_list() {
         if device.vendor_id() != HINATA_VID { continue; }
 
-        if let Some(instance) = get_instance(&device.path().to_string_lossy()) {
+        if let Some((path, instance)) = parse_hid_path(&device.path().to_string_lossy()) {
             if exclude.contains(&instance) { continue };
             let entry = devices.entry(instance).or_insert(
                 PreDeviceBuilder {
@@ -225,18 +216,18 @@ pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDevic
                 });
 
             if device.usage_page() == USAGE_PAGE_READ {
-                entry.read = Some(device.path().to_owned());
+                entry.read = Some((device.path().to_owned(), path));
             } else if device.usage_page() == USAGE_PAGE_WRITE {
-                entry.write = Some(device.path().to_owned());
+                entry.write = Some((device.path().to_owned(), path));
             }
         }
     }
 
     Ok(devices.into_iter().filter_map(|(instance, builder)| {
-        if let PreDeviceBuilder { read: Some(r), write: Some(w), device_name: Some(n), pid: Some(p)} = builder {
+        if let PreDeviceBuilder { read: Some((read_raw, read)), write: Some((write_raw, write)), device_name: Some(n), pid: Some(p)} = builder {
             Some(
                 HinataDeviceBuilder {
-                    connection: HidConnectionBuilder { read: r, write: w }, // 使用统一封装
+                    connection: HidConnectionBuilder { read: read_raw, write: write_raw, path: HidDevicePath {read, write} }, // 使用统一封装
                     instance_id: instance,
                     device_name: n,
                     pid: p,
@@ -260,7 +251,7 @@ pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDevic
             if let Some(instance) = get_instance(&device.path().to_string_lossy()) {
                 if exclude.contains(&instance) { continue };
                 devices.push(HinataDeviceBuilder {
-                    connection: HidConnectionBuilder { inner: device.path().to_owned() }, // 使用统一封装
+                    connection: HidConnectionBuilder { inner: device.path().to_owned(), path: HidDevicePath {read: instance.clone(), write: instance.clone()} }, // 使用统一封装
                     instance_id: instance,
                 });
             };
@@ -285,4 +276,11 @@ fn test_hid_all_init() {
     hid.add_devices(0, 0).unwrap();
     let duration = start.elapsed();
     println!("Time elapsed: {:?}", duration);
+}
+
+#[tokio::test]
+async fn get_com_port() {
+    let builders = find_devices(vec![]).await.unwrap();
+    println!("port: {}", builders[0].get_com_port().unwrap())
+
 }

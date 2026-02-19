@@ -5,6 +5,7 @@ pub mod card;
 pub mod pn532;
 pub mod error;
 pub mod utils;
+mod types;
 
 use tokio::task::spawn_blocking;
 use error::Error;
