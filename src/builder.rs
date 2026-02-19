@@ -10,6 +10,7 @@ use crate::error::HinataResult;
 use crate::message::{InMessage, OutMessage, Subscription};
 use crate::{find_devices, utils};
 use crate::types::HidDevicePath;
+use crate::utils::com::get_com_port_by_hid_instance;
 use crate::utils::device_parse::{parse_hid_path};
 
 const HINATA_VID: u16 = 0xF822;
@@ -122,8 +123,7 @@ impl HinataDeviceBuilder {
     pub fn get_device_name(&self) -> String {self.device_name.clone()}
 
     pub fn get_com_port(&self) -> HinataResult<String> {
-        let path = utils::com::get_com_instance_id_by_hid_instance_id(&self.connection.path.read)?;
-        utils::com::get_com_port_by_instance_id(&path)
+        get_com_port_by_hid_instance(&self.connection.path.read)
     }
 
     pub fn get_product_id(&self) -> u16 { self.pid }
