@@ -10,7 +10,7 @@ use crate::error::HinataResult;
 use crate::message::{InMessage, OutMessage, Subscription};
 use crate::{find_devices, utils};
 use crate::types::HidDevicePath;
-use crate::utils::com::get_com_port_by_hid_instance;
+use crate::utils::com::{get_com_instance_id_by_hid_instance_id, get_com_port_by_hid_instance};
 use crate::utils::device_parse::{parse_hid_path};
 
 const HINATA_VID: u16 = 0xF822;
@@ -126,6 +126,16 @@ impl HinataDeviceBuilder {
         get_com_port_by_hid_instance(&self.connection.path.read)
     }
 
+    pub fn get_com_instance_id(&mut self) -> HinataResult<String> {
+        if let Some(id) = &self.connection.path.com {
+            Ok(id.to_string())
+        } else {
+            let path = get_com_instance_id_by_hid_instance_id(&self.connection.path.read)?;
+            self.connection.path.com = Some(path.clone());
+            Ok(path)
+        }
+    }
+
     pub fn get_product_id(&self) -> u16 { self.pid }
 
     fn handle_hid_error(subscribes: &mut HashMap<u8, Subscription>, _: HidError) {
@@ -227,7 +237,7 @@ pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDevic
         if let PreDeviceBuilder { read: Some((read_raw, read)), write: Some((write_raw, write)), device_name: Some(n), pid: Some(p)} = builder {
             Some(
                 HinataDeviceBuilder {
-                    connection: HidConnectionBuilder { read: read_raw, write: write_raw, path: HidDevicePath {read, write} }, // 使用统一封装
+                    connection: HidConnectionBuilder { read: read_raw, write: write_raw, path: HidDevicePath {read, write, com: None} }, // 使用统一封装
                     instance_id: instance,
                     device_name: n,
                     pid: p,

@@ -3,4 +3,5 @@
 pub(crate) struct HidDevicePath {
     pub read: String,
     pub write: String,
+    pub com: Option<String>
 }
