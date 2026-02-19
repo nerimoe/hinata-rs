@@ -181,13 +181,7 @@ impl HinataDevice {
         self.info.path.write.to_string()
     }
 
-    pub fn get_com_instance_id(&mut self) -> HinataResult<String> {
-        if let Some(id) = &self.info.path.com {
-            Ok(id.to_string())
-        } else {
-            let path = get_com_instance_id_by_hid_instance_id(&self.info.path.read)?;
-            self.info.path.com = Some(path.clone());
-            Ok(path)
-        }
+    pub fn get_com_instance_id(&self) -> String {
+         self.info.path.com.to_string()
     }
 }

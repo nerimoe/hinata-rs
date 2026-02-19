@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::ffi::CString;
@@ -8,8 +9,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use crate::device::{Config, HinataDevice, Info};
 use crate::error::HinataResult;
 use crate::message::{InMessage, OutMessage, Subscription};
-use crate::{find_devices, utils};
-use crate::types::HidDevicePath;
+use crate::types::{HidDevicePath, HidDevicePathWithoutCom};
 use crate::utils::com::{get_com_instance_id_by_hid_instance_id, get_com_port_by_hid_instance};
 use crate::utils::device_parse::{parse_hid_path};
 
@@ -25,7 +25,7 @@ struct HidConnectionBuilder {
     read: CString,
     #[cfg(not(target_os = "macos"))]
     write: CString,
-    path: HidDevicePath
+    path: HidDevicePathWithoutCom
 }
 
 impl HidConnectionBuilder {
@@ -94,6 +94,12 @@ impl HinataDeviceBuilder {
         let (main_to_sub_tx, main_to_sub_rx): (Sender<InMessage>, Receiver<InMessage>) = mpsc::channel(255);
         let conn = self.connection.build()?;
 
+        let path = HidDevicePath {
+            read: self.connection.path.read.clone(),
+            write: self.connection.path.write.clone(),
+            com: self.get_com_instance_id()?,
+        };
+
         let handler = thread::spawn(move || {
             Self::io_loop(conn, main_to_sub_rx, debug)
         });
@@ -103,7 +109,7 @@ impl HinataDeviceBuilder {
             firmware_commit_hash: None,
             chip_id: None,
             instance_id: self.instance_id.clone(),
-            path: self.connection.path.clone(),
+            path,
             device_name: self.device_name.clone(),
             pid: self.pid,
         };
@@ -122,17 +128,21 @@ impl HinataDeviceBuilder {
 
     pub fn get_device_name(&self) -> String {self.device_name.clone()}
 
-    pub fn get_com_port(&self) -> HinataResult<String> {
-        get_com_port_by_hid_instance(&self.connection.path.read)
+    pub fn get_com_port(&mut self) -> HinataResult<String> {
+        let instance_id = self.get_com_instance_id()?;
+        get_com_port_by_hid_instance(&instance_id)
     }
 
-    pub fn get_com_instance_id(&mut self) -> HinataResult<String> {
-        if let Some(id) = &self.connection.path.com {
-            Ok(id.to_string())
-        } else {
-            let path = get_com_instance_id_by_hid_instance_id(&self.connection.path.read)?;
-            self.connection.path.com = Some(path.clone());
-            Ok(path)
+    pub fn get_com_instance_id(&self) -> HinataResult<String> {
+        let mut id_opt = self.connection.path.com.borrow_mut();
+
+        match &*id_opt {
+            Some(id) => Ok(id.clone()),
+            None => {
+                let path = get_com_instance_id_by_hid_instance_id(&self.connection.path.read)?;
+                *id_opt = Some(path.clone());
+                Ok(path)
+            }
         }
     }
 
@@ -237,7 +247,7 @@ pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDevic
         if let PreDeviceBuilder { read: Some((read_raw, read)), write: Some((write_raw, write)), device_name: Some(n), pid: Some(p)} = builder {
             Some(
                 HinataDeviceBuilder {
-                    connection: HidConnectionBuilder { read: read_raw, write: write_raw, path: HidDevicePath {read, write, com: None} }, // 使用统一封装
+                    connection: HidConnectionBuilder { read: read_raw, write: write_raw, path: HidDevicePathWithoutCom {read, write, com: RefCell::new(None)} },
                     instance_id: instance,
                     device_name: n,
                     pid: p,
@@ -261,7 +271,7 @@ pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDevic
             if let Some(instance) = get_instance(&device.path().to_string_lossy()) {
                 if exclude.contains(&instance) { continue };
                 devices.push(HinataDeviceBuilder {
-                    connection: HidConnectionBuilder { inner: device.path().to_owned(), path: HidDevicePath {read: instance.clone(), write: instance.clone()} }, // 使用统一封装
+                    connection: HidConnectionBuilder { inner: device.path().to_owned(), path: HidDevicePathWithoutCom {read: instance.clone(), write: instance.clone(), com: RefCell::new(None)} }, // 使用统一封装
                     instance_id: instance,
                 });
             };
@@ -286,11 +296,4 @@ fn test_hid_all_init() {
     hid.add_devices(0, 0).unwrap();
     let duration = start.elapsed();
     println!("Time elapsed: {:?}", duration);
-}
-
-#[tokio::test]
-async fn get_com_port() {
-    let builders = find_devices(vec![]).await.unwrap();
-    println!("port: {}", builders[0].get_com_port().unwrap())
-
 }
