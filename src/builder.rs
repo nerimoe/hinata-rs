@@ -1,7 +1,7 @@
-use std::cell::{OnceCell};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::ffi::CString;
+use std::sync::OnceLock;
 use std::thread;
 use hidapi::{HidApi, HidDevice, HidError};
 use tokio::sync::mpsc;
@@ -243,7 +243,7 @@ pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDevic
         if let PreDeviceBuilder { read: Some((read_raw, read)), write: Some((write_raw, write)), device_name: Some(n), pid: Some(p)} = builder {
             Some(
                 HinataDeviceBuilder {
-                    connection: HidConnectionBuilder { read: read_raw, write: write_raw, path: HidDevicePathWithoutCom {read, write, com: OnceCell::new()} },
+                    connection: HidConnectionBuilder { read: read_raw, write: write_raw, path: HidDevicePathWithoutCom {read, write, com: OnceLock::new()} },
                     instance_id: instance,
                     device_name: n,
                     pid: p,
