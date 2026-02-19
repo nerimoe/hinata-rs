@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{OnceCell};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::ffi::CString;
@@ -134,16 +134,12 @@ impl HinataDeviceBuilder {
     }
 
     pub fn get_com_instance_id(&self) -> HinataResult<String> {
-        let mut id_opt = self.connection.path.com.borrow_mut();
-
-        match &*id_opt {
-            Some(id) => Ok(id.clone()),
-            None => {
-                let path = get_com_instance_id_by_hid_instance_id(&self.connection.path.read)?;
-                *id_opt = Some(path.clone());
-                Ok(path)
-            }
+        if let Some(id) = self.connection.path.com.get() {
+            return Ok(id.clone());
         }
+        let path = get_com_instance_id_by_hid_instance_id(&self.connection.path.read)?;
+        let _ = self.connection.path.com.set(path.clone());
+        Ok(path)
     }
 
     pub fn get_product_id(&self) -> u16 { self.pid }
@@ -247,7 +243,7 @@ pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDevic
         if let PreDeviceBuilder { read: Some((read_raw, read)), write: Some((write_raw, write)), device_name: Some(n), pid: Some(p)} = builder {
             Some(
                 HinataDeviceBuilder {
-                    connection: HidConnectionBuilder { read: read_raw, write: write_raw, path: HidDevicePathWithoutCom {read, write, com: RefCell::new(None)} },
+                    connection: HidConnectionBuilder { read: read_raw, write: write_raw, path: HidDevicePathWithoutCom {read, write, com: OnceCell::new()} },
                     instance_id: instance,
                     device_name: n,
                     pid: p,

@@ -1,10 +1,10 @@
-use std::cell::RefCell;
+use std::cell::{OnceCell};
 
 #[derive(Debug, Clone)]
 pub(crate) struct HidDevicePathWithoutCom {
     pub read: String,
     pub write: String,
-    pub com: RefCell<Option<String>>
+    pub com: OnceCell<String>
 }
 
 #[derive(Debug, Clone)]
