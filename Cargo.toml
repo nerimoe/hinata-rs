@@ -1,6 +1,6 @@
 [package]
 name = "hinata"
-version = "0.1.4"
+version = "0.2.0"
 edition = "2024"
 
 [dependencies]
@@ -16,7 +16,7 @@ tokio = { version = "1.49.0", features = ["full"] }
 winreg = "0.55.0"
 regex = "1.12.3"
 windows = { version = "0.62.2", features = [
-    "Win32_Devices_DeviceAndDriverInstallation", # 替代旧的 ConfigManager
-    "Win32_Devices_Properties",                  # 用于 DEVPKEY_Device_ClassGuid
+    "Win32_Devices_DeviceAndDriverInstallation",
+    "Win32_Devices_Properties",
     "Win32_Foundation",
 ] }
