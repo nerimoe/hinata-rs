@@ -1,11 +1,11 @@
-use async_trait::async_trait;
-use tokio::sync::mpsc::{Receiver, Sender};
-use std::thread::{JoinHandle};
-use std::time::Duration;
 use crate::error::{Error, HinataResult};
 use crate::message::{InMessage, OutMessage, Subscription, UnSubscribePolicy};
 use crate::pn532::{Pn532, Pn532Command, Pn532Direction, Pn532Packet, Pn532Port};
 use crate::types::HidDevicePath;
+use async_trait::async_trait;
+use std::thread::JoinHandle;
+use std::time::Duration;
+use tokio::sync::mpsc::{Receiver, Sender};
 
 #[derive(Debug)]
 pub(crate) struct Info {
@@ -33,7 +33,6 @@ pub struct HinataDevice {
     config: Config,
     loop_handler: Option<JoinHandle<()>>,
 
-
     tx: Sender<InMessage>,
 }
 
@@ -45,26 +44,39 @@ impl Pn532Port for HinataDevice {
         let mut send = vec![1, 0xE2];
         send.extend_from_slice(&packet.to_bytes());
 
-        let _ = self.tx.send(InMessage::SendPacketAndSubscribe(send, subscription)).await;
+        let _ = self
+            .tx
+            .send(InMessage::SendPacketAndSubscribe(send, subscription))
+            .await;
 
         let standard_ack = [0, 0, 0xFF, 0, 0xFF, 0];
 
         let ack = Self::receive_packet(&mut rx, Duration::from_millis(1000)).await?;
-        if &ack[1..7] != &standard_ack {return Err(Error::Protocol("ack error".to_string()))}
+        if &ack[1..7] != &standard_ack {
+            return Err(Error::Protocol("ack error".to_string()));
+        }
 
         let res = Self::receive_packet(&mut rx, Duration::from_millis(1000)).await?;
-        let res_packet = Pn532Packet::from_bytes(&res[1..]).map_err(|e| {Error::Protocol(e)})?;
+        let res_packet = Pn532Packet::from_bytes(&res[1..]).map_err(|e| Error::Protocol(e))?;
 
-        if res_packet.direction != Pn532Direction::Pn532ToHost { return Err(Error::Protocol("Direction mismatch".to_string()))};
-        if res_packet.command != packet.command { return Err(Error::Protocol("Command mismatch".to_string()))};
+        if res_packet.direction != Pn532Direction::Pn532ToHost {
+            return Err(Error::Protocol("Direction mismatch".to_string()));
+        };
+        if res_packet.command != packet.command {
+            return Err(Error::Protocol("Command mismatch".to_string()));
+        };
 
         Ok(res_packet.payload)
     }
 }
 
 impl HinataDevice {
-
-    pub(crate) fn new(info: Info, config: Config, loop_handler: Option<JoinHandle<()>>, tx: Sender<InMessage>) -> Self {
+    pub(crate) fn new(
+        info: Info,
+        config: Config,
+        loop_handler: Option<JoinHandle<()>>,
+        tx: Sender<InMessage>,
+    ) -> Self {
         Self {
             info,
             config,
@@ -77,8 +89,11 @@ impl HinataDevice {
         self.info.instance_id.to_string()
     }
 
-    async fn receive_packet(rx: &mut Receiver<OutMessage>, timeout: Duration) -> HinataResult<Vec<u8>> {
-        tokio::select!{
+    async fn receive_packet(
+        rx: &mut Receiver<OutMessage>,
+        timeout: Duration,
+    ) -> HinataResult<Vec<u8>> {
+        tokio::select! {
             message = rx.recv() => {
                 if let Some(data) = message {
                     match data {
@@ -103,7 +118,10 @@ impl HinataDevice {
         let mut packet = vec![1, cmd];
         packet.extend_from_slice(payload);
         let (subscription, mut rx) = Subscription::new(UnSubscribePolicy::Count(1));
-        let _ = self.tx.send(InMessage::SendPacketAndSubscribe(packet, subscription)).await;
+        let _ = self
+            .tx
+            .send(InMessage::SendPacketAndSubscribe(packet, subscription))
+            .await;
         let res = Self::receive_packet(&mut rx, Duration::from_millis(1000)).await?;
         Ok(res)
     }
@@ -113,7 +131,9 @@ impl HinataDevice {
     }
 
     pub async fn get_firmware_timestamp(&mut self) -> HinataResult<u32> {
-        if self.info.firmware_timestamp > 0 {return Ok(self.info.firmware_timestamp)}
+        if self.info.firmware_timestamp > 0 {
+            return Ok(self.info.firmware_timestamp);
+        }
         let raw = self.request(1, &[]).await?;
         let str = String::from_utf8(raw[..10].to_vec())?;
         let num = str.parse::<u32>()?;
@@ -121,17 +141,23 @@ impl HinataDevice {
         Ok(num)
     }
 
-    pub async fn set_led(&mut self, r: u8, g: u8, b: u8) { self.request_without_response(0x07, &[r, g, b]).await; }
+    pub async fn set_led(&mut self, r: u8, g: u8, b: u8) {
+        self.request_without_response(0x07, &[r, g, b]).await;
+    }
 
     pub async fn reset_led(&mut self) {
         self.request_without_response(0xEA, &[]).await
     }
 
-    pub async fn enter_bootloader(&mut self) { self.request_without_response(0xF0, &[]).await }
+    pub async fn enter_bootloader(&mut self) {
+        self.request_without_response(0xF0, &[]).await
+    }
 
     pub async fn get_chip_id(&mut self) -> HinataResult<[u8; 4]> {
         let timestamp = self.get_firmware_timestamp().await?;
-        if timestamp < 2025051301 { return Err(Error::NotSupport("Firmware version too old".into())) };
+        if timestamp < 2025051301 {
+            return Err(Error::NotSupport("Firmware version too old".into()));
+        };
         let chip_id = if let Some(id) = self.info.chip_id {
             id
         } else {
@@ -144,7 +170,8 @@ impl HinataDevice {
     }
 
     fn get_four_bytes(data: &[u8]) -> HinataResult<[u8; 4]> {
-        let array: [u8; 4] = data.get(..4)
+        let array: [u8; 4] = data
+            .get(..4)
             .and_then(|slice| slice.try_into().ok())
             .ok_or(Error::Protocol("buffer size error".into()))?;
         Ok(array)
@@ -152,7 +179,9 @@ impl HinataDevice {
 
     pub async fn get_firmware_commit_hash(&mut self) -> HinataResult<[u8; 4]> {
         let timestamp = self.get_firmware_timestamp().await?;
-        if timestamp < 2025051301 { return Err(Error::NotSupport("Firmware version too old".into())) };
+        if timestamp < 2025051301 {
+            return Err(Error::NotSupport("Firmware version too old".into()));
+        };
         let commit_hash = if let Some(hash) = self.info.firmware_commit_hash {
             hash
         } else {
@@ -164,13 +193,12 @@ impl HinataDevice {
         Ok(commit_hash)
     }
 
-    pub fn get_device_name(&self) -> String {self.info.device_name.clone()}
+    pub fn get_device_name(&self) -> String {
+        self.info.device_name.clone()
+    }
 
-    pub fn get_product_id(&self) -> u16 { self.info.pid }
-
-    #[cfg(target_os = "windows")]
-    pub fn get_com_port(&self) -> HinataResult<String> {
-        crate::utils::com::get_com_port_by_hid_instance(&self.info.path.read)
+    pub fn get_product_id(&self) -> u16 {
+        self.info.pid
     }
 
     pub fn get_path_read(&self) -> String {
@@ -183,6 +211,11 @@ impl HinataDevice {
 
     #[cfg(target_os = "windows")]
     pub fn get_com_instance_id(&self) -> String {
-         self.info.path.com.to_string()
+        self.info.path.com.clone().unwrap_or_default()
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn get_com_port(&self) -> HinataResult<String> {
+        crate::utils::com::get_com_port_by_com_instance_id(&self.get_com_instance_id())
     }
 }

@@ -113,7 +113,7 @@ unsafe fn find_child_port(parent_node: u32) -> Option<String> {
 }
 
 /// 辅助函数：直接从注册表读取 PortName
-fn get_com_port_by_instance_id(instance_id: &str) -> HinataResult<String> {
+pub fn get_com_port_by_com_instance_id(instance_id: &str) -> HinataResult<String> {
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
     let key_path = format!("SYSTEM\\CurrentControlSet\\Enum\\{}\\Device Parameters", instance_id);
     let key = hklm.open_subkey(&key_path)?;
