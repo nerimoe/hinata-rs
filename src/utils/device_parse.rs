@@ -13,6 +13,6 @@ pub fn parse_hid_path(path: &str) -> Option<(String, String)> {
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn get_instance(path: &str) -> Option<(String, String)> {
+pub fn parse_hid_path(path: &str) -> Option<(String, String)> {
     Some((path.to_string(), path.to_string()))
 }

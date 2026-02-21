@@ -10,8 +10,7 @@ use crate::device::{Config, HinataDevice, Info};
 use crate::error::HinataResult;
 use crate::message::{InMessage, OutMessage, Subscription};
 use crate::types::{HidDevicePath, HidDevicePathWithoutCom};
-use crate::utils::com::{get_com_instance_id_by_hid_instance_id, get_com_port_by_hid_instance};
-use crate::utils::device_parse::{parse_hid_path};
+use crate::utils::device_parse::parse_hid_path;
 
 const HINATA_VID: u16 = 0xF822;
 const USAGE_PAGE_READ: u16 = 1;
@@ -32,7 +31,7 @@ impl HidConnectionBuilder {
 
     #[cfg(target_os = "macos")]
     fn build(&self) -> Result<HidConnection, HidError> {
-        let api = HidApi::new().unwrap();
+        let api = HidApi::new()?;
         Ok(
             HidConnection {
                 inner: api.open_path(&self.inner)?
@@ -94,10 +93,16 @@ impl HinataDeviceBuilder {
         let (main_to_sub_tx, main_to_sub_rx): (Sender<InMessage>, Receiver<InMessage>) = mpsc::channel(255);
         let conn = self.connection.build()?;
 
+        #[cfg(target_os = "windows")]
         let path = HidDevicePath {
             read: self.connection.path.read.clone(),
             write: self.connection.path.write.clone(),
             com: self.get_com_instance_id()?,
+        };
+        #[cfg(not(target_os = "windows"))]
+        let path = HidDevicePath {
+            read: self.connection.path.read.clone(),
+            write: self.connection.path.write.clone(),
         };
 
         let handler = thread::spawn(move || {
@@ -128,16 +133,17 @@ impl HinataDeviceBuilder {
 
     pub fn get_device_name(&self) -> String {self.device_name.clone()}
 
+    #[cfg(target_os = "windows")]
     pub fn get_com_port(&mut self) -> HinataResult<String> {
         let instance_id = self.get_com_instance_id()?;
-        get_com_port_by_hid_instance(&instance_id)
+        crate::utils::com::get_com_port_by_hid_instance(&instance_id)
     }
-
+    #[cfg(target_os = "windows")]
     pub fn get_com_instance_id(&self) -> HinataResult<String> {
         if let Some(id) = self.connection.path.com.get() {
             return Ok(id.clone());
         }
-        let path = get_com_instance_id_by_hid_instance_id(&self.connection.path.read)?;
+        let path = crate::utils::com::get_com_instance_id_by_hid_instance_id(&self.connection.path.read)?;
         let _ = self.connection.path.com.set(path.clone());
         Ok(path)
     }
@@ -264,11 +270,14 @@ pub(crate) fn find_devices_inner(exclude: Vec<String>) -> Result<Vec<HinataDevic
 
     for device in hid.device_list() {
         if device.vendor_id() == HINATA_VID && device.usage_page() == USAGE_PAGE_WRITE {
-            if let Some(instance) = get_instance(&device.path().to_string_lossy()) {
+            if let (Some((instance, _)), Some(name)) = (parse_hid_path(&device.path().to_string_lossy()), device.product_string()) {
+                
                 if exclude.contains(&instance) { continue };
                 devices.push(HinataDeviceBuilder {
-                    connection: HidConnectionBuilder { inner: device.path().to_owned(), path: HidDevicePathWithoutCom {read: instance.clone(), write: instance.clone(), com: RefCell::new(None)} }, // 使用统一封装
+                    connection: HidConnectionBuilder { inner: device.path().to_owned(), path: HidDevicePathWithoutCom {read: instance.clone(), write: instance.clone(), com: OnceLock::new()} }, // 使用统一封装
                     instance_id: instance,
+                    device_name: name.to_string(),
+                    pid: device.product_id(),
                 });
             };
         }
