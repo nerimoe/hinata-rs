@@ -9,7 +9,7 @@ const GUID_DEVCLASS_PORTS: GUID = GUID::from_u128(0x4d36e978_e325_11ce_bfc1_0800
 
 pub fn get_com_port_by_hid_instance(instance: &str) -> HinataResult<String> {
     let com_instance = get_com_instance_id_by_hid_instance_id(instance)?;
-    get_com_port_by_instance_id(&com_instance)
+    get_com_port_by_com_instance_id(&com_instance)
 }
 
 pub fn get_com_instance_id_by_hid_instance_id(instance_id: &str) -> HinataResult<String> {
@@ -126,6 +126,6 @@ pub fn get_com_port_by_com_instance_id(instance_id: &str) -> HinataResult<String
 #[test]
 fn get_port_test() {
     let com_serial = get_com_instance_id_by_hid_instance_id("HID\\VID_F822&PID_0147&MI_02&Col01\\8&38333037&0&0000").unwrap();
-    let port = get_com_port_by_instance_id(&com_serial).unwrap();
+    let port = get_com_port_by_com_instance_id(&com_serial).unwrap();
     println!("{}, {}", com_serial, port);
 }
